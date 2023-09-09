@@ -1,3 +1,4 @@
+//go:build go1.9
 // +build go1.9
 
 package mux
@@ -10,11 +11,34 @@ import (
 	"testing"
 )
 
+func TestSchemeMatchersV2(t *testing.T) {
+	router := NewRouter()
+
+	router.
+		// 路径&处理函数
+		HandleFunc("/blog/admin/addBlog", func(rw http.ResponseWriter, r *http.Request) {
+			_, _ = rw.Write([]byte("hello http world"))
+		}).
+		// http协议
+		Schemes("http").
+		// 请求方式
+		Methods("POST").
+		// 域名
+		Host("*.baker-yuan.cn").
+		// 请求头
+		Headers("Content-Type", "application/json").
+		// 请求参数
+		Queries("foo")
+
+}
+
 func TestSchemeMatchers(t *testing.T) {
 	router := NewRouter()
+
 	router.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		rw.Write([]byte("hello http world"))
 	}).Schemes("http")
+
 	router.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		rw.Write([]byte("hello https world"))
 	}).Schemes("https")

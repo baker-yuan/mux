@@ -1,7 +1,3 @@
-// Copyright 2012 The Gorilla Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package mux
 
 import (
@@ -15,17 +11,18 @@ import (
 )
 
 type routeRegexpOptions struct {
-	strictSlash    bool
-	useEncodedPath bool
+	strictSlash    bool // 指示路由是否严格区分末尾的斜杠。例如，如果strictSlash为true，那么/path/和/path可能被视为两个不同的路径。
+	useEncodedPath bool // 指示路由是否使用编码后的路径。例如，如果useEncodedPath为true，那么路径中的特殊字符可能会被编码（如空格被编码为%20）。
 }
 
+// 正则匹配类型
 type regexpType int
 
 const (
-	regexpTypePath   regexpType = 0
-	regexpTypeHost   regexpType = 1
-	regexpTypePrefix regexpType = 2
-	regexpTypeQuery  regexpType = 3
+	regexpTypePath   regexpType = 0 // 路径
+	regexpTypeHost   regexpType = 1 // 主机类型
+	regexpTypePrefix regexpType = 2 // 前缀
+	regexpTypeQuery  regexpType = 3 // 查询参数
 )
 
 // newRouteRegexp parses a route template and returns a routeRegexp,
@@ -38,7 +35,12 @@ const (
 // Previously we accepted only Python-like identifiers for variable
 // names ([a-zA-Z_][a-zA-Z0-9_]*), but currently the only restriction is that
 // name and pattern can't be empty, and names can't contain a colon.
+// 解析一个路由模板并返回一个routeRegexp，用于匹配主机、路径或查询字符串。
+// @tpl 模板字符串
 func newRouteRegexp(tpl string, typ regexpType, options routeRegexpOptions) (*routeRegexp, error) {
+	// 这个函数的主要作用是解析路由模板，提取出变量名和模式，然后生成一个用于匹配主机、路径或查询字符串的正则表达式，以及一个用于生成URL的反向模板。
+
+	// 函数首先检查模板字符串是否格式正确，如果不正确则返回错误。
 	// Check if it is well-formed.
 	idxs, errBraces := braceIndices(tpl)
 	if errBraces != nil {
@@ -46,28 +48,39 @@ func newRouteRegexp(tpl string, typ regexpType, options routeRegexpOptions) (*ro
 	}
 	// Backup the original.
 	template := tpl
+
 	// Now let's parse it.
 	defaultPattern := "[^/]+"
+
+	// 然后，根据typ的类型设置默认的匹配模式。如果typ是查询类型，那么默认模式是.*；如果typ是主机类型，那么默认模式是[^.]+；否则默认模式是[^/]+。
 	if typ == regexpTypeQuery {
 		defaultPattern = ".*"
 	} else if typ == regexpTypeHost {
 		defaultPattern = "[^.]+"
 	}
+
+	// 接着，如果typ不是路径类型，那么将options.strictSlash设置为false。
 	// Only match strict slash if not matching
 	if typ != regexpTypePath {
 		options.strictSlash = false
 	}
+
+	// 然后，如果options.strictSlash为true且模板字符串以斜杠结尾，那么将模板字符串的最后一个字符删除，并设置endSlash为true。
 	// Set a flag for strictSlash.
 	endSlash := false
 	if options.strictSlash && strings.HasSuffix(tpl, "/") {
 		tpl = tpl[:len(tpl)-1]
 		endSlash = true
 	}
+
+	// 接下来，函数创建两个缓冲区pattern和reverse，并在pattern的开头添加一个^字符。
 	varsN := make([]string, len(idxs)/2)
 	varsR := make([]*regexp.Regexp, len(idxs)/2)
 	pattern := bytes.NewBufferString("")
 	pattern.WriteByte('^')
 	reverse := bytes.NewBufferString("")
+
+	// 然后，函数遍历模板字符串中的所有花括号，对每一对花括号，函数都会提取出变量名和模式，然后将它们添加到pattern和reverse中，并将变量名和编译后的模式添加到varsN和varsR中。
 	var end int
 	var err error
 	for i := 0; i < len(idxs); i += 2 {
@@ -98,12 +111,15 @@ func newRouteRegexp(tpl string, typ regexpType, options routeRegexpOptions) (*ro
 			return nil, err
 		}
 	}
+
+	// 接着，函数将模板字符串剩余的部分添加到pattern和reverse中。
 	// Add the remaining.
 	raw := tpl[end:]
 	pattern.WriteString(regexp.QuoteMeta(raw))
 	if options.strictSlash {
 		pattern.WriteString("[/]?")
 	}
+
 	if typ == regexpTypeQuery {
 		// Add the default pattern if the query value is empty
 		if queryVal := strings.SplitN(template, "=", 2)[1]; queryVal == "" {
@@ -114,6 +130,7 @@ func newRouteRegexp(tpl string, typ regexpType, options routeRegexpOptions) (*ro
 		pattern.WriteByte('$')
 	}
 
+	// 然后，如果typ是主机类型且pattern中不包含冒号，那么将wildcardHostPort设置为true。
 	var wildcardHostPort bool
 	if typ == regexpTypeHost {
 		if !strings.Contains(pattern.String(), ":") {
@@ -124,18 +141,21 @@ func newRouteRegexp(tpl string, typ regexpType, options routeRegexpOptions) (*ro
 	if endSlash {
 		reverse.WriteByte('/')
 	}
+
+	// 接下来，函数编译pattern，如果编译过程中出现错误，就返回该错误。
 	// Compile full regexp.
 	reg, errCompile := regexp.Compile(pattern.String())
 	if errCompile != nil {
 		return nil, errCompile
 	}
 
+	// 然后，函数检查编译后的正则表达式中的子表达式数量是否等于花括号的数量的一半，如果不等于，那么抛出一个异常。
 	// Check for capturing groups which used to work in older versions
 	if reg.NumSubexp() != len(idxs)/2 {
-		panic(fmt.Sprintf("route %s contains capture groups in its regexp. ", template) +
-			"Only non-capturing groups are accepted: e.g. (?:pattern) instead of (pattern)")
+		panic(fmt.Sprintf("route %s contains capture groups in its regexp. ", template) + "Only non-capturing groups are accepted: e.g. (?:pattern) instead of (pattern)")
 	}
 
+	// 最后，函数返回一个新的routeRegexp实例。
 	// Done!
 	return &routeRegexp{
 		template:         template,
@@ -151,22 +171,38 @@ func newRouteRegexp(tpl string, typ regexpType, options routeRegexpOptions) (*ro
 
 // routeRegexp stores a regexp to match a host or path and information to
 // collect and validate route variables.
+// 用于存储一个正则表达式以匹配主机或路径，以及收集和验证路由变量的信息。
 type routeRegexp struct {
 	// The unmodified template.
+	// 这是一个字符串类型的字段，表示未修改的模板。
 	template string
+
 	// The type of match
+	// 这是一个regexpType类型的字段，表示匹配的类型。
 	regexpType regexpType
+
 	// Options for matching
+	// 这是一个routeRegexpOptions类型的字段，表示匹配的选项。
 	options routeRegexpOptions
+
 	// Expanded regexp.
+	// 这是一个*regexp.Regexp类型的字段，表示扩展的正则表达式。
 	regexp *regexp.Regexp
+
 	// Reverse template.
+	// 这是一个字符串类型的字段，表示反向模板。
 	reverse string
+
 	// Variable names.
+	// 这是一个字符串类型的切片，表示变量名。
 	varsN []string
+
 	// Variable regexps (validators).
+	// 这是一个*regexp.Regexp类型的切片，表示变量的正则表达式（验证器）。
 	varsR []*regexp.Regexp
+
 	// Wildcard host-port (no strict port match in hostname)
+	// 这是一个布尔类型的字段。如果为true，表示在主机名中不进行严格的端口匹配。
 	wildcardHostPort bool
 }
 
@@ -314,10 +350,11 @@ func varGroupName(idx int) string {
 // ----------------------------------------------------------------------------
 
 // routeRegexpGroup groups the route matchers that carry variables.
+// 用于将携带变量的路由匹配器分组。
 type routeRegexpGroup struct {
-	host    *routeRegexp
-	path    *routeRegexp
-	queries []*routeRegexp
+	host    *routeRegexp   // 这是一个*routeRegexp类型的字段，用于匹配主机。
+	path    *routeRegexp   // 这是一个*routeRegexp类型的字段，用于匹配路径。
+	queries []*routeRegexp // 这是一个*routeRegexp类型的切片，用于匹配查询参数。
 }
 
 // setMatch extracts the variables from the URL once a route matches.

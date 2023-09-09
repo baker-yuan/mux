@@ -1,7 +1,3 @@
-// Copyright 2012 The Gorilla Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package mux
 
 import (
@@ -16,18 +12,27 @@ import (
 // Route stores information to match a request and build URLs.
 type Route struct {
 	// Request handler for the route.
+	// 这是一个http.Handler类型的字段，用于处理路由的请求。
 	handler http.Handler
+
 	// If true, this route never matches: it is only used to build URLs.
+	// 这是一个布尔类型的字段。如果为true，那么这个路由永远不会匹配，它只用于构建URL。
 	buildOnly bool
+
 	// The name used to build URLs.
+	// 这是一个字符串类型的字段，用于构建URL。
 	name string
+
 	// Error resulted from building a route.
+	// 这是一个错误类型的字段，用于存储构建路由时产生的错误。
 	err error
 
 	// "global" reference to all named routes
+	// 这是一个映射类型的字段，键是字符串，值是*Route类型。它是对所有命名路由的"全局"引用。
 	namedRoutes map[string]*Route
 
 	// config possibly passed in from `Router`
+	// 这是一个可能从Router传入的配置。
 	routeConf
 }
 
@@ -38,13 +43,17 @@ func (r *Route) SkipClean() bool {
 }
 
 // Match matches the route against the request.
+// 这是Route类型的Match方法，它尝试将给定的HTTP请求与路由进行匹配。
+// 这个方法的主要作用是将HTTP请求与路由进行匹配，如果找到匹配的路由，就返回true，否则返回false。
 func (r *Route) Match(req *http.Request, match *RouteMatch) bool {
+	// 方法首先检查路由是否仅用于构建或是否有错误，如果是，则返回false。
 	if r.buildOnly || r.err != nil {
 		return false
 	}
 
 	var matchErr error
 
+	// 然后，方法遍历路由的所有匹配器，尝试将请求与每个匹配器进行匹配。如果请求与匹配器不匹配，方法会检查匹配器是否是方法匹配器，如果是，则将匹配错误设置为方法不匹配，然后继续下一个匹配器；否则，返回false。
 	// Match everything.
 	for _, m := range r.matchers {
 		if matched := m.Match(req, match); !matched {
@@ -53,6 +62,7 @@ func (r *Route) Match(req *http.Request, match *RouteMatch) bool {
 				continue
 			}
 
+			// 如果有匹配错误，方法会将该错误设置为RouteMatch参数的MatchErr字段，并返回false。
 			// Ignore ErrNotFound errors. These errors arise from match call
 			// to Subrouters.
 			//
@@ -74,6 +84,7 @@ func (r *Route) Match(req *http.Request, match *RouteMatch) bool {
 		return false
 	}
 
+	// 如果匹配错误是方法不匹配，但路由有处理器，那么将清除匹配错误，并将处理器设置为RouteMatch参数的Handler字段。
 	if match.MatchErr == ErrMethodMismatch && r.handler != nil {
 		// We found a route which matches request method, clear MatchErr
 		match.MatchErr = nil
@@ -81,6 +92,7 @@ func (r *Route) Match(req *http.Request, match *RouteMatch) bool {
 		match.Handler = r.handler
 	}
 
+	// 然后，如果RouteMatch参数的Route字段为空，那么将路由设置为RouteMatch参数的Route字段。如果RouteMatch参数的Handler字段为空，那么将路由的处理器设置为RouteMatch参数的Handler字段。如果RouteMatch参数的Vars字段为空，那么创建一个新的映射并设置为RouteMatch参数的Vars字段。
 	// Yay, we have a match. Let's collect some info about it.
 	if match.Route == nil {
 		match.Route = r
@@ -92,6 +104,7 @@ func (r *Route) Match(req *http.Request, match *RouteMatch) bool {
 		match.Vars = make(map[string]string)
 	}
 
+	// 最后，设置匹配的变量，并返回true表示匹配成功。
 	// Set variables.
 	r.regexp.setMatch(req, match, r)
 	return true
@@ -172,9 +185,12 @@ func (r *Route) addMatcher(m matcher) *Route {
 
 // addRegexpMatcher adds a host or path matcher and builder to a route.
 func (r *Route) addRegexpMatcher(tpl string, typ regexpType) error {
+	// 检查路由是否有错误，如果有则直接返回该错误。
 	if r.err != nil {
 		return r.err
 	}
+	// 如果typ是路径类型或前缀类型，方法会检查模板字符串是否以斜杠开头，如果不是，则返回一个错误。
+	// 如果路由已经有一个路径正则表达式，那么模板字符串将被追加到现有的路径模板后面。
 	if typ == regexpTypePath || typ == regexpTypePrefix {
 		if len(tpl) > 0 && tpl[0] != '/' {
 			return fmt.Errorf("mux: path must start with a slash, got %q", tpl)
@@ -183,6 +199,8 @@ func (r *Route) addRegexpMatcher(tpl string, typ regexpType) error {
 			tpl = strings.TrimRight(r.regexp.path.template, "/") + tpl
 		}
 	}
+
+	// 方法创建一个新的路由正则表达式。如果创建过程中出现错误，就返回该错误。
 	rr, err := newRouteRegexp(tpl, typ, routeRegexpOptions{
 		strictSlash:    r.strictSlash,
 		useEncodedPath: r.useEncodedPath,
@@ -190,11 +208,15 @@ func (r *Route) addRegexpMatcher(tpl string, typ regexpType) error {
 	if err != nil {
 		return err
 	}
+
+	// 遍历路由的所有查询正则表达式，检查新的路由正则表达式的变量名是否与查询正则表达式的变量名冲突。如果有冲突，就返回一个错误。
 	for _, q := range r.regexp.queries {
 		if err = uniqueVars(rr.varsN, q.varsN); err != nil {
 			return err
 		}
 	}
+
+	// 如果typ是主机类型，方法会检查新的路由正则表达式的变量名是否与路径正则表达式的变量名冲突，如果有冲突，就返回一个错误。然后，将新的路由正则表达式设置为路由的主机正则表达式。
 	if typ == regexpTypeHost {
 		if r.regexp.path != nil {
 			if err = uniqueVars(rr.varsN, r.regexp.path.varsN); err != nil {
@@ -203,6 +225,7 @@ func (r *Route) addRegexpMatcher(tpl string, typ regexpType) error {
 		}
 		r.regexp.host = rr
 	} else {
+		// 如果typ不是主机类型，方法会检查新的路由正则表达式的变量名是否与主机正则表达式的变量名冲突，如果有冲突，就返回一个错误。然后，如果typ是查询类型，就将新的路由正则表达式添加到路由的查询正则表达式列表中，否则，将新的路由正则表达式设置为路由的路径正则表达式。
 		if r.regexp.host != nil {
 			if err = uniqueVars(rr.varsN, r.regexp.host.varsN); err != nil {
 				return err
@@ -214,6 +237,7 @@ func (r *Route) addRegexpMatcher(tpl string, typ regexpType) error {
 			r.regexp.path = rr
 		}
 	}
+	// 将新的路由正则表达式添加到路由的匹配器列表中，并返回nil表示没有错误。
 	r.addMatcher(rr)
 	return nil
 }

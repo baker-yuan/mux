@@ -1,3 +1,16 @@
+```bash
+https://blog.csdn.net/darjun/article/details/118948667
+https://blog.csdn.net/weixin_42479092/article/details/109965158
+```
+
+```bash
+路由匹配方式和 spring cloud gateway 的谓词工厂类似
+
+https://docs.spring.io/spring-cloud-gateway/docs/current/reference/html/#gateway-request-predicates-factories
+```
+
+
+
 # gorilla/mux
 
 [![GoDoc](https://godoc.org/github.com/gorilla/mux?status.svg)](https://godoc.org/github.com/gorilla/mux)

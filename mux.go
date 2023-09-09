@@ -1,7 +1,3 @@
-// Copyright 2012 The Gorilla Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package mux
 
 import (
@@ -23,7 +19,9 @@ var (
 
 // NewRouter returns a new router instance.
 func NewRouter() *Router {
-	return &Router{namedRoutes: make(map[string]*Route)}
+	return &Router{
+		namedRoutes: make(map[string]*Route),
+	}
 }
 
 // Router registers routes to be matched and dispatches a handler.
@@ -31,66 +29,83 @@ func NewRouter() *Router {
 // It implements the http.Handler interface, so it can be registered to serve
 // requests:
 //
-//     var router = mux.NewRouter()
+//	var router = mux.NewRouter()
 //
-//     func main() {
-//         http.Handle("/", router)
-//     }
+//	func main() {
+//	    http.Handle("/", router)
+//	}
 //
 // Or, for Google App Engine, register it in a init() function:
 //
-//     func init() {
-//         http.Handle("/", router)
-//     }
+//	func init() {
+//	    http.Handle("/", router)
+//	}
 //
 // This will send all incoming requests to the router.
 type Router struct {
 	// Configurable Handler to be used when no route matches.
+	// 当没有与请求路径匹配的路由时，使用的可配置处理程序
 	NotFoundHandler http.Handler
 
 	// Configurable Handler to be used when the request method does not match the route.
+	// 当请求方法不匹配任何路由时，使用的可配置处理程序。
 	MethodNotAllowedHandler http.Handler
 
 	// Routes to be matched, in order.
+	// 按顺序匹配的路由。
 	routes []*Route
 
 	// Routes by name for URL building.
+	// 按名称存储的路由，用于构建 URL。
 	namedRoutes map[string]*Route
 
 	// If true, do not clear the request context after handling the request.
 	//
 	// Deprecated: No effect, since the context is stored on the request itself.
+	// 如果为 true，则在处理请求后不清除请求上下文。
 	KeepContext bool
 
 	// Slice of middlewares to be called after a match is found
+	// 在找到匹配的路由后要调用的中间件切片。
 	middlewares []middleware
 
 	// configuration shared with `Route`
+	// 与 Route 结构体共享的配置。
 	routeConf
 }
 
 // common route configuration shared between `Router` and `Route`
+// 用于存储Router和Route之间共享的常见路由配置。
 type routeConf struct {
 	// If true, "/path/foo%2Fbar/to" will match the path "/path/{var}/to"
+	// 这是一个布尔类型的字段。如果为true，那么"/path/foo%2Fbar/to"将匹配路径"/path/{var}/to"。
+	// 指示路由是否使用编码后的路径。例如，如果useEncodedPath为true，那么路径中的特殊字符可能会被编码（如空格被编码为%20）。
 	useEncodedPath bool
 
 	// If true, when the path pattern is "/path/", accessing "/path" will
 	// redirect to the former and vice versa.
+	// 这是一个布尔类型的字段。如果为true，当路径模式为"/path/"时，访问"/path"将重定向到前者，反之亦然。
+	// 指示路由是否严格区分末尾的斜杠。例如，如果strictSlash为true，那么/path/和/path可能被视为两个不同的路径。
 	strictSlash bool
 
 	// If true, when the path pattern is "/path//to", accessing "/path//to"
 	// will not redirect
+	// 这是一个布尔类型的字段。如果为true，当路径模式为"/path//to"时，访问"/path//to"将不会重定向。
 	skipClean bool
 
 	// Manager for the variables from host and path.
+	// 这是一个routeRegexpGroup类型的字段，用于管理来自主机和路径的变量。
 	regexp routeRegexpGroup
 
 	// List of matchers.
+	// 这是一个matcher类型的切片，用于存储匹配器列表。
 	matchers []matcher
 
 	// The scheme used when building URLs.
+	// 这是一个字符串类型的字段，用于构建URL时使用的方案。
 	buildScheme string
 
+	// 这是一个BuildVarsFunc类型的字段，用于构建变量的函数。
 	buildVarsFunc BuildVarsFunc
 }
 
@@ -133,7 +148,11 @@ func copyRouteRegexp(r *routeRegexp) *routeRegexp {
 // will be filled in the match argument's MatchErr field. If the match failure type
 // (eg: not found) has a registered handler, the handler is assigned to the Handler
 // field of the match argument.
+// 这是Router类型的Match方法，它尝试将给定的HTTP请求与路由器的已注册路由进行匹配。
+// 这个方法的主要作用是将HTTP请求与路由进行匹配，如果找到匹配的路由，就返回true，否则返回false。
 func (r *Router) Match(req *http.Request, match *RouteMatch) bool {
+
+	// 方法首先遍历路由器的所有路由，如果找到与请求匹配的路由，就将该路由、处理器和变量填充到RouteMatch参数中，并返回true。如果没有错误，还会构建中间件链。
 	for _, route := range r.routes {
 		if route.Match(req, match) {
 			// Build middleware chain if no error was found
@@ -146,6 +165,9 @@ func (r *Router) Match(req *http.Request, match *RouteMatch) bool {
 		}
 	}
 
+	// 如果请求与任何路由都不匹配，方法会返回false。如果有可用的匹配失败原因，会填充到RouteMatch参数的MatchErr字段中。如果匹配失败类型（例如：未找到）有注册的处理器，该处理器会被分配给RouteMatch参数的Handler字段。
+	// 如果匹配错误是方法不匹配，且路由器有注册的MethodNotAllowedHandler，则将其分配给RouteMatch参数的Handler字段，并返回true。
+
 	if match.MatchErr == ErrMethodMismatch {
 		if r.MethodNotAllowedHandler != nil {
 			match.Handler = r.MethodNotAllowedHandler
@@ -155,6 +177,7 @@ func (r *Router) Match(req *http.Request, match *RouteMatch) bool {
 		return false
 	}
 
+	// 如果没有找到匹配的路由，但路由器有注册的NotFoundHandler，则将其分配给RouteMatch参数的Handler字段，将ErrNotFound分配给RouteMatch参数的MatchErr字段，并返回true。
 	// Closest match for a router (includes sub-routers)
 	if r.NotFoundHandler != nil {
 		match.Handler = r.NotFoundHandler
@@ -162,6 +185,7 @@ func (r *Router) Match(req *http.Request, match *RouteMatch) bool {
 		return true
 	}
 
+	// 如果以上所有情况都不满足，将ErrNotFound分配给RouteMatch参数的MatchErr字段，并返回false。
 	match.MatchErr = ErrNotFound
 	return false
 }
@@ -170,7 +194,10 @@ func (r *Router) Match(req *http.Request, match *RouteMatch) bool {
 //
 // When there is a match, the route variables can be retrieved calling
 // mux.Vars(request).
+// !!! 请求入口
+// 这个方法的主要作用是分发HTTP请求，将请求交给匹配的路由的处理器进行处理。如果没有找到匹配的路由，就使用默认的处理器处理请求。
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// 首先检查请求的路径是否需要清理，如果需要，就将路径清理为规范形式，并重定向到清理后的路径。
 	if !r.skipClean {
 		path := req.URL.Path
 		if r.useEncodedPath {
@@ -191,6 +218,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	}
+	// 然后，方法尝试将请求与路由进行匹配，如果找到匹配的路由，就获取该路由的处理器，并将路由变量和路由添加到请求中。
 	var match RouteMatch
 	var handler http.Handler
 	if r.Match(req, &match) {
@@ -199,14 +227,17 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		req = requestWithRoute(req, match.Route)
 	}
 
+	// 如果没有找到匹配的路由，但匹配错误是方法不匹配，那么将处理器设置为方法不允许的处理器。
 	if handler == nil && match.MatchErr == ErrMethodMismatch {
 		handler = methodNotAllowedHandler()
 	}
 
+	// 如果处理器仍然为空，那么将处理器设置为未找到的处理器。
 	if handler == nil {
 		handler = http.NotFoundHandler()
 	}
 
+	// 最后，调用处理器的ServeHTTP方法处理请求。
 	handler.ServeHTTP(w, req)
 }
 
@@ -276,7 +307,10 @@ func (r *Router) UseEncodedPath() *Router {
 // NewRoute registers an empty route.
 func (r *Router) NewRoute() *Route {
 	// initialize a route with a copy of the parent router's configuration
-	route := &Route{routeConf: copyRouteConf(r.routeConf), namedRoutes: r.namedRoutes}
+	route := &Route{
+		routeConf:   copyRouteConf(r.routeConf),
+		namedRoutes: r.namedRoutes,
+	}
 	r.routes = append(r.routes, route)
 	return route
 }
@@ -295,9 +329,11 @@ func (r *Router) Handle(path string, handler http.Handler) *Route {
 
 // HandleFunc registers a new route with a matcher for the URL path.
 // See Route.Path() and Route.HandlerFunc().
-func (r *Router) HandleFunc(path string, f func(http.ResponseWriter,
-	*http.Request)) *Route {
-	return r.NewRoute().Path(path).HandlerFunc(f)
+func (r *Router) HandleFunc(path string, f func(http.ResponseWriter, *http.Request)) *Route {
+	return r.
+		NewRoute().
+		Path(path).
+		HandlerFunc(f)
 }
 
 // Headers registers a new route with a matcher for request header values.
